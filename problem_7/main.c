@@ -48,7 +48,6 @@ void *customer(void *arg)
 
     while (!QUIT) {
         pthread_mutex_lock(&lock_customers);
-        queue_push(customer_queue, *index);
         printf("Customer %d ready\n", *index);
         pthread_mutex_unlock(&lock_customers);
         pthread_mutex_lock(&lock_taxis);
