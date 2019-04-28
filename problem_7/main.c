@@ -16,7 +16,7 @@ bool QUIT = false;
 pthread_t *customers, *taxis;  // Thread arrays
 sem_t sem_customer, sem_taxi;  // Counting semaphores
 
-pthread_mutex_t lock_taxis;
+pthread_mutex_t lock_customers, lock_taxis;
 pthread_cond_t taxis_available, taxis_used;
 
 Queue *customer_queue, *taxi_queue;
@@ -27,12 +27,9 @@ void *taxi(void *arg)
 
     while (!QUIT) {
         pthread_mutex_lock(&lock_taxis);  // Gain access to the taxi queue
-        while (queue_is_full(taxi_queue)) {
-            printf("Queue is full!\n");
-            pthread_cond_wait(&taxis_used, &lock_taxis);
-        }
-        queue_push(taxi_queue, *index);    // Push taxi index onto queue
-        printf("Taxi %d (%p) added to the queue\n", *index, arg);
+        while (queue_is_full(taxi_queue)) pthread_cond_wait(&taxis_used, &lock_taxis);
+        queue_push(taxi_queue, *index);   // Push taxi index onto queue
+        printf("Taxi %d is ready for pickup\n", *index);
         pthread_mutex_unlock(&lock_taxis);
         pthread_cond_signal(&taxis_available);
         sem_wait(&sem_customer);
@@ -47,20 +44,21 @@ void *taxi(void *arg)
 
 void *customer(void *arg)
 {
-    int index = *((int *) arg);
+    int *index = (int *) arg;
 
     while (!QUIT) {
-        sem_post(&sem_customer);
-        printf("Customer %d ready\n", index);
+        pthread_mutex_lock(&lock_customers);
+        queue_push(customer_queue, *index);
+        printf("Customer %d ready\n", *index);
+        pthread_mutex_unlock(&lock_customers);
         pthread_mutex_lock(&lock_taxis);
-        while (queue_is_empty(taxi_queue)) {
-            printf("Queue is empty!\n");
-            pthread_cond_wait(&taxis_available, &lock_taxis);
-        }
-        printf("Customer %d boarding taxi %d\n", index, queue_pop(taxi_queue));
-        pthread_mutex_unlock(&lock_taxis);
+        while (queue_is_empty(taxi_queue)) pthread_cond_wait(&taxis_available, &lock_taxis);
+        sem_post(&sem_customer);
+        printf("Customer %d boarding taxi %d\n", *index, queue_pop(taxi_queue));
         pthread_cond_signal(&taxis_used);
+        pthread_mutex_unlock(&lock_taxis);
         sleep(rand() % 10);
+        printf("Customer %d arrived at destination\n", *index);
         // Customer boards taxi...
         // done();
     }
